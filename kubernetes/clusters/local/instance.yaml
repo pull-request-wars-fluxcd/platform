@@ -22,6 +22,8 @@ spec:
     domain: "cluster.local"
   sync:
     kind: GitRepository
+    provider: github
     url: "https://github.com/pull-request-wars-fluxcd/platform"
     ref: "refs/heads/dev"
     path: "kubernetes/clusters/local"
+    pullSecret: github-app-auth

@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# GitHub App credentials
+github-app-auth/
+
 # Editor/IDE
 # .idea/
 # .vscode/

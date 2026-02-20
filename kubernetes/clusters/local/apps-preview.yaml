@@ -1,0 +1,61 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: apps-preview
+  namespace: flux-system
+spec:
+  commonMetadata:
+    labels:
+      toolkit.fluxcd.io/tenant: dev-team
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: apps-preview
+    - kind: ServiceAccount
+      apiVersion: v1
+      metadata:
+        name: dev-team
+        namespace: apps-preview
+    - apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: dev-team-reconciler
+        namespace: apps-preview
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: admin
+      subjects:
+        - kind: ServiceAccount
+          name: dev-team
+          namespace: apps-preview
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: github-app-auth
+        namespace: apps-preview
+        annotations:
+          fluxcd.controlplane.io/copyFrom: "flux-system/github-app-auth"
+    - apiVersion: kustomize.toolkit.fluxcd.io/v1
+      kind: Kustomization
+      metadata:
+        name: apps-preview-sync
+        namespace: flux-system
+      spec:
+        dependsOn:
+          - name: infra-sync
+        targetNamespace: apps-preview
+        interval: 1h
+        retryInterval: 1m
+        timeout: 5m
+        path: "kubernetes/apps-preview"
+        prune: true
+        wait: true
+        sourceRef:
+          kind: GitRepository
+          name: flux-system
+        healthCheckExprs:
+          - apiVersion: fluxcd.controlplane.io/v1
+            kind: ResourceSet
+            current: status.conditions.filter(c, c.type == 'Ready').all(c, c.status == 'True' && c.observedGeneration == metadata.generation)

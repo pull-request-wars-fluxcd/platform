@@ -1,0 +1,67 @@
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: flux-appx-prs
+  namespace: apps-preview
+  annotations:
+    fluxcd.controlplane.io/reconcile: "enabled"
+    fluxcd.controlplane.io/reconcileEvery: "1m"
+spec:
+  type: GitHubPullRequest
+  url: https://github.com/pull-request-wars-fluxcd/flux-appx
+  filter:
+    labels:
+      - "deploy/flux-preview"
+  defaultValues:
+    chart: "charts/flux-appx"
+    image: "ghcr.io/pull-request-wars-fluxcd/flux-appx"
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: flux-appx
+  namespace: apps-preview
+spec:
+  inputsFrom:
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSetInputProvider
+      name: flux-appx-prs
+  resources:
+    - apiVersion: source.toolkit.fluxcd.io/v1
+      kind: GitRepository
+      metadata:
+        name: flux-appx-<< inputs.id >>
+        namespace: apps-preview
+      spec:
+        interval: 1h
+        url: https://github.com/pull-request-wars-fluxcd/flux-appx
+        ref:
+          commit: << inputs.sha >>
+        provider: github
+        secretRef:
+          name: github-app-auth
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: flux-appx-<< inputs.id >>
+        namespace: apps-preview
+        annotations:
+          event.toolkit.fluxcd.io/branch: << inputs.branch | quote >>
+          event.toolkit.fluxcd.io/commit: << inputs.sha | quote >>
+          event.toolkit.fluxcd.io/author: << inputs.author | quote >>
+      spec:
+        interval: 1h
+        releaseName: flux-appx-<< inputs.id >>
+        serviceAccountName: dev-team
+        chart:
+          spec:
+            chart: << inputs.chart | quote >>
+            reconcileStrategy: Revision
+            sourceRef:
+              kind: GitRepository
+              name: flux-appx-<< inputs.id >>
+        values:
+          image:
+            repository: << inputs.image | quote >>
+            tag: pr-<< inputs.id >>-<< inputs.sha | trunc 7 >>

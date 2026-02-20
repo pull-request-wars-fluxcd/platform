@@ -35,8 +35,8 @@ echo "Waiting for cluster addons sync to complete"
 flux-operator -n flux-system wait rset infra --timeout=5m
 flux tree kustomization infra-sync
 
-echo "Waiting for apps sync to complete"
-flux-operator -n flux-system wait rset apps --timeout=5m
-flux tree kustomization apps-sync
+echo "Waiting for apps preview sync to complete"
+flux-operator -n flux-system wait rset apps-preview --timeout=5m
+flux tree kustomization apps-preview-sync
 
 echo "✔ Cluster is ready"

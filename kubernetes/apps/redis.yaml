@@ -1,0 +1,135 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: redis-latest
+  namespace: apps
+spec:
+  type: OCIArtifactTag
+  url: oci://docker.io/redis
+  filter:
+    semver: ">0.0.0-0"
+    includeTag: ".*-alpine$"
+    limit: 1
+  schedule:
+    - cron: "0 10 * * 1-4"
+      timeZone: UTC
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: redis
+  namespace: apps
+  annotations:
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
+spec:
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      name: redis-latest
+  serviceAccountName: dev-team
+  commonMetadata:
+    labels:
+      app.kubernetes.io/name: redis
+  wait: true
+  resources:
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: redis
+        namespace: << inputs.provider.namespace >>
+    - apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: redis-config
+        namespace: << inputs.provider.namespace >>
+      data:
+        redis.conf: |
+          maxmemory 64mb
+          maxmemory-policy allkeys-lru
+          save ""
+          appendonly no
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: redis
+        namespace: << inputs.provider.namespace >>
+      spec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: redis
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/name: redis
+          spec:
+            serviceAccountName: redis
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 999
+              fsGroup: 1000
+              seccompProfile:
+                type: RuntimeDefault
+            containers:
+              - name: redis
+                image: redis:<< inputs.tag >>@<< inputs.digest >>
+                imagePullPolicy: IfNotPresent
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  runAsNonRoot: true
+                  capabilities:
+                    drop:
+                      - ALL
+                command:
+                  - redis-server
+                  - "/redis-master/redis.conf"
+                ports:
+                  - name: redis
+                    containerPort: 6379
+                    protocol: TCP
+                livenessProbe:
+                  tcpSocket:
+                    port: redis
+                  initialDelaySeconds: 5
+                  timeoutSeconds: 5
+                readinessProbe:
+                  exec:
+                    command:
+                      - redis-cli
+                      - ping
+                  initialDelaySeconds: 5
+                  timeoutSeconds: 5
+                resources:
+                  limits:
+                    cpu: 1000m
+                    memory: 128Mi
+                  requests:
+                    cpu: 100m
+                    memory: 32Mi
+                volumeMounts:
+                  - mountPath: /var/lib/redis
+                    name: data
+                  - mountPath: /redis-master
+                    name: config
+            volumes:
+              - name: data
+                emptyDir: {}
+              - name: config
+                configMap:
+                  name: redis-config
+                  items:
+                    - key: redis.conf
+                      path: redis.conf
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: redis
+        namespace: << inputs.provider.namespace >>
+      spec:
+        type: ClusterIP
+        selector:
+          app.kubernetes.io/name: redis
+        ports:
+          - name: redis
+            port: 6379
+            protocol: TCP
+            targetPort: redis

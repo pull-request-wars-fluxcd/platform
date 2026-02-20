@@ -1,0 +1,156 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSetInputProvider
+metadata:
+  name: podinfo-latest
+  namespace: apps
+  annotations:
+    fluxcd.controlplane.io/reconcileEvery: "5m"
+spec:
+  type: OCIArtifactTag
+  url: oci://ghcr.io/stefanprodan/podinfo
+  filter:
+    semver: "*"
+    limit: 1
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: podinfo
+  namespace: apps
+  annotations:
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
+spec:
+  inputsFrom:
+    - kind: ResourceSetInputProvider
+      name: podinfo-latest
+  dependsOn:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: redis
+      namespace: apps
+      ready: true
+  serviceAccountName: dev-team
+  commonMetadata:
+    labels:
+      app.kubernetes.io/name: podinfo
+  wait: true
+  resources:
+    - apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: podinfo
+        namespace: << inputs.provider.namespace >>
+    - apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: podinfo
+        namespace: << inputs.provider.namespace >>
+      spec:
+        selector:
+          matchLabels:
+            app.kubernetes.io/name: podinfo
+        template:
+          metadata:
+            annotations:
+              prometheus.io/scrape: "true"
+              prometheus.io/port: "9797"
+            labels:
+              app.kubernetes.io/name: podinfo
+          spec:
+            serviceAccountName: podinfo
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+              fsGroup: 65534
+              seccompProfile:
+                type: RuntimeDefault
+            containers:
+            - name: podinfod
+              image: ghcr.io/stefanprodan/podinfo:<< inputs.tag >>@<< inputs.digest >>
+              imagePullPolicy: IfNotPresent
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              ports:
+              - name: http
+                containerPort: 9898
+                protocol: TCP
+              - name: http-metrics
+                containerPort: 9797
+                protocol: TCP
+              - name: grpc
+                containerPort: 9999
+                protocol: TCP
+              command:
+              - ./podinfo
+              - --port=9898
+              - --port-metrics=9797
+              - --grpc-port=9999
+              - --grpc-service-name=podinfo
+              - --level=info
+              - --cache-server=tcp://redis.<< inputs.provider.namespace >>.svc:6379
+              env:
+              - name: PODINFO_UI_COLOR
+                value: "#34577c"
+              livenessProbe:
+                httpGet:
+                  path: /healthz
+                  port: http
+              readinessProbe:
+                httpGet:
+                  path: /readyz
+                  port: http
+              resources:
+                limits:
+                  cpu: 2000m
+                  memory: 512Mi
+                requests:
+                  cpu: 100m
+                  memory: 64Mi
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+            volumes:
+              - name: data
+                emptyDir: {}
+    - apiVersion: v1
+      kind: Service
+      metadata:
+        name: podinfo
+        namespace: << inputs.provider.namespace >>
+      spec:
+        type: ClusterIP
+        selector:
+          app.kubernetes.io/name: podinfo
+        ports:
+          - name: http
+            port: 9898
+            protocol: TCP
+            targetPort: http
+          - port: 9999
+            targetPort: grpc
+            protocol: TCP
+            name: grpc
+    - apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: podinfo
+        namespace: << inputs.provider.namespace >>
+      spec:
+        scaleTargetRef:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: podinfo
+        minReplicas: 2
+        maxReplicas: 4
+        metrics:
+        - type: Resource
+          resource:
+            name: cpu
+            target:
+              type: Utilization
+              averageUtilization: 99

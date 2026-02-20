@@ -1,0 +1,66 @@
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: metrics-server
+  namespace: flux-system
+  annotations:
+    fluxcd.controlplane.io/reconcileTimeout: "5m"
+spec:
+  dependsOn:
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSet
+      name: cert-manager
+      namespace: flux-system
+      ready: true
+  inputs:
+    - interval: "1h" # check for updates every hour
+      version: "*" # upgrade to latest stable version
+      namespace: monitoring
+  commonMetadata:
+    labels:
+      toolkit.fluxcd.io/tenant: platform-team
+  wait: true
+  resources:
+    - apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: << inputs.namespace >>
+    - apiVersion: source.toolkit.fluxcd.io/v1
+      kind: OCIRepository
+      metadata:
+        name: << inputs.provider.name >>
+        namespace: << inputs.namespace >>
+      spec:
+        interval: << inputs.interval | quote >>
+        url: oci://ghcr.io/controlplaneio-fluxcd/charts/metrics-server
+        layerSelector:
+          mediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
+          operation: copy
+        ref:
+          semver: << inputs.version | quote >>
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: << inputs.provider.name >>
+        namespace: << inputs.namespace >>
+      spec:
+        interval: 12h
+        install:
+          strategy:
+            name: RetryOnFailure
+            retryInterval: 2m
+        upgrade:
+          strategy:
+            name: RetryOnFailure
+            retryInterval: 3m
+        releaseName: << inputs.provider.name >>
+        chartRef:
+          kind: OCIRepository
+          name: << inputs.provider.name >>
+        values:
+          apiService:
+            insecureSkipTLSVerify: false
+          tls:
+            type: cert-manager
+          args:
+            - --kubelet-insecure-tls

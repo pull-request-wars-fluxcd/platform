@@ -2,7 +2,7 @@
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Provider
 metadata:
-  name: github-commit-status
+  name: github-status-flux-appx
   namespace: app-preview
 spec:
   type: github
@@ -13,7 +13,7 @@ spec:
 apiVersion: notification.toolkit.fluxcd.io/v1beta3
 kind: Alert
 metadata:
-  name: github-commit-status
+  name: github-status-flux-appx
   namespace: app-preview
 spec:
   providerRef:

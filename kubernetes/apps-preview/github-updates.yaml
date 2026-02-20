@@ -1,0 +1,23 @@
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: github-commit-status
+  namespace: app-preview
+spec:
+  type: github
+  address: https://github.com/pull-request-wars-fluxcd/flux-appx
+  secretRef:
+    name: github-app-auth
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: github-commit-status
+  namespace: app-preview
+spec:
+  providerRef:
+    name: github-commit-status
+  eventSources:
+    - kind: GitRepository
+      name: '*'

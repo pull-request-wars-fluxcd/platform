@@ -17,7 +17,7 @@ metadata:
   namespace: flux-system
 spec:
   providerRef:
-    name: github-commit-status
+    name: github-status-platform
   eventSources:
     - kind: Kustomization
       name: flux-system

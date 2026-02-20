@@ -17,7 +17,7 @@ metadata:
   namespace: app-preview
 spec:
   providerRef:
-    name: github-commit-status
+    name: github-status-flux-appx
   eventSources:
     - kind: GitRepository
       name: '*'

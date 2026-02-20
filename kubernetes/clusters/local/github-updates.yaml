@@ -1,0 +1,23 @@
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: github-status-platform
+  namespace: app-preview
+spec:
+  type: github
+  address: https://github.com/pull-request-wars-fluxcd/platform
+  secretRef:
+    name: github-app-auth
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: github-status-platform
+  namespace: app-preview
+spec:
+  providerRef:
+    name: github-commit-status
+  eventSources:
+    - kind: Kustomization
+      name: flux-system

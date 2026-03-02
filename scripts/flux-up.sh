@@ -19,16 +19,12 @@ fi
 
 source "${CREDS_DIR}/.env"
 
-kubectl get namespace flux-system > /dev/null 2>&1 || kubectl create namespace flux-system
-
-flux-operator create secret githubapp github-app-auth \
-  --namespace=flux-system \
-  --app-id="${GITHUB_APP_ID}" \
-  --app-installation-id="${GITHUB_APP_INSTALLATION_ID}" \
-  --app-private-key-file="${CREDS_DIR}/private-key.pem"
-
 echo "Starting cluster bootstrap"
-flux-operator install -f ./kubernetes/clusters/local/instance.yaml
+flux-operator install \
+  -f ./kubernetes/clusters/local/instance.yaml \
+  --instance-sync-gha-app-id="${GITHUB_APP_ID}" \
+  --instance-sync-gha-installation-owner="${GITHUB_APP_OWNER}" \
+  --instance-sync-gha-private-key-file="${CREDS_DIR}/private-key.pem"
 
 echo ""
 echo "Waiting for cluster addons sync to complete"

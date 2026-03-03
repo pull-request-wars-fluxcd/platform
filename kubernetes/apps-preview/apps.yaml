@@ -1,0 +1,92 @@
+---
+apiVersion: fluxcd.controlplane.io/v1
+kind: ResourceSet
+metadata:
+  name: apps
+  namespace: apps-preview
+spec:
+  inputsFrom:
+    - apiVersion: fluxcd.controlplane.io/v1
+      kind: ResourceSetInputProvider
+      selector:
+        matchLabels:
+          fluxcd.controlplane.io/preview: apps
+  resources:
+    # This HelmRelease template holds the configuration for deploying
+    # the app from the generic Helm chart.
+    # A HelmRelease is generated for each pull request,
+    # using the PR number and commit SHA in the image tag.
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      metadata:
+        name: appx-<< inputs.id >>
+        namespace: << inputs.provider.namespace >>
+        annotations:
+          event.toolkit.fluxcd.io/change_request: << inputs.id | quote >>
+          event.toolkit.fluxcd.io/commit: << inputs.sha | quote >>
+          event.toolkit.fluxcd.io/branch: << inputs.branch | quote >>
+          event.toolkit.fluxcd.io/author: << inputs.author | quote >>
+      spec:
+        interval: 1h
+        releaseName: appx-<< inputs.id >>
+        serviceAccountName: dev-team
+        chartRef:
+          kind: HelmChart
+          name: generic-app
+        values:
+          image:
+            repository: << inputs.image | quote >>
+            tag: pr-<< inputs.id >>-<< inputs.sha | trunc 7 >>
+          replicas: << inputs.replicas >>
+    # This Provider template holds the configuration for commenting on the pull requests.
+    # A Provider is generated for each app repo and is shared for all PRs from that repo.
+    - apiVersion: notification.toolkit.fluxcd.io/v1beta3
+      kind: Provider
+      metadata:
+        name: github-pr-<< inputs.name >>
+        namespace: << inputs.provider.namespace >>
+      spec:
+        type: githubpullrequestcomment
+        address: << inputs.repo | quote >>
+        secretRef:
+          name: github-app-auth
+    # This Alert template will post a comment on the pull request when the HelmRelease is upgraded.
+    # An Alert is generated for each pull request and references the HelmRelease for that PR.
+    - apiVersion: notification.toolkit.fluxcd.io/v1beta3
+      kind: Alert
+      metadata:
+        name: github-pr-<< inputs.name >>-<< inputs.id >>
+        namespace: << inputs.provider.namespace >>
+      spec:
+        providerRef:
+          name: github-pr-<< inputs.name >>
+        eventSeverity: info
+        eventSources:
+          - kind: HelmRelease
+            name: appx-<< inputs.id >>
+    # This Provider template holds the configuration for committing status updates on the pull requests.
+    # A Provider is generated for each app repo and can is shared for all PRs from that repo.
+    - apiVersion: notification.toolkit.fluxcd.io/v1beta3
+      kind: Provider
+      metadata:
+        name: github-commit-<< inputs.name >>
+        namespace: << inputs.provider.namespace >>
+      spec:
+        type: github
+        address: << inputs.repo | quote >>
+        secretRef:
+          name: github-app-auth
+    # This Alert template will update the commit status when the HelmRelease is upgraded.
+    # An Alert is generated for each pull request and references the HelmRelease for that PR.
+    - apiVersion: notification.toolkit.fluxcd.io/v1beta3
+      kind: Alert
+      metadata:
+        name: github-commit-<< inputs.name >>-<< inputs.id >>
+        namespace: << inputs.provider.namespace >>
+      spec:
+        providerRef:
+          name: github-commit-<< inputs.name >>
+        eventSeverity: info
+        eventSources:
+          - kind: HelmRelease
+            name: appx-<< inputs.id >>

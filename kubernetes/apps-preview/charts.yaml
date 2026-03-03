@@ -1,0 +1,27 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: charts
+  namespace: apps-preview
+spec:
+  interval: 1h
+  url: https://github.com/pull-request-wars-fluxcd/charts
+  ref:
+    branch: main
+  provider: github
+  secretRef:
+    name: github-app-auth
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmChart
+metadata:
+  name: generic-app
+  namespace: apps-preview
+spec:
+  interval: 1h
+  chart: "charts/app"
+  reconcileStrategy: Revision
+  sourceRef:
+    kind: GitRepository
+    name: charts
